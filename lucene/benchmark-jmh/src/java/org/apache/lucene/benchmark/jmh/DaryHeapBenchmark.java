@@ -44,7 +44,7 @@ import org.openjdk.jmh.annotations.Warmup;
 @State(Scope.Thread)
 public class DaryHeapBenchmark {
 
-  @Param({"10", "100", "1000", "10000"})
+  @Param({"10", "20", "100", "1000", "10000"})
   int topN;
 
   // Number of insertWithOverflow calls per invocation, simulating a large result set feeding a
