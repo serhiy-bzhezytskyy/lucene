@@ -70,6 +70,12 @@ public class PriorityQueue<T> implements Iterable<T> {
         maxSize, (a, b) -> comparator.compare(a, b) < 0, sentinelObjectSupplier);
   }
 
+  // Number of children per heap node. A ternary (3-ary) heap does fewer comparisons per sift-down
+  // than a binary heap, which speeds up queue-heavy collectors (e.g. TopFieldCollector) at large
+  // sizes. See GITHUB#16076 and TernaryLongHeap (GITHUB#15140). NOTE: subclasses that walk the heap
+  // array directly (MultiTermsEnum.TermMergeQueue) hardcode this same arity and must stay in sync.
+  private static final int ARITY = 3;
+
   protected int size = 0;
   private final int maxSize;
   private final T[] heap;
@@ -167,8 +173,9 @@ public class PriorityQueue<T> implements Iterable<T> {
         this.size++;
       }
     } finally {
-      // The loop goes down to 1 as heap is 1-based not 0-based.
-      for (int i = (size >>> 1); i >= 1; i--) {
+      // Start from the last internal node (the parent of the last element in a 1-based d-ary heap)
+      // and sift down to the root (index 1, as the heap is 1-based not 0-based).
+      for (int i = size < 2 ? 0 : ((size - 2) / ARITY) + 1; i >= 1; i--) {
         downHeap(i);
       }
     }
@@ -199,8 +206,9 @@ public class PriorityQueue<T> implements Iterable<T> {
             this.size++;
           });
     } finally {
-      // The loop goes down to 1 as heap is 1-based not 0-based.
-      for (int i = (size >>> 1); i >= 1; i--) {
+      // Start from the last internal node (the parent of the last element in a 1-based d-ary heap)
+      // and sift down to the root (index 1, as the heap is 1-based not 0-based).
+      for (int i = size < 2 ? 0 : ((size - 2) / ARITY) + 1; i >= 1; i--) {
         downHeap(i);
       }
     }
@@ -332,11 +340,12 @@ public class PriorityQueue<T> implements Iterable<T> {
   protected boolean upHeap(int origPos) {
     int i = origPos;
     T node = heap[i]; // save bottom node
-    int j = i >>> 1;
-    while (j > 0 && lessThan.lessThan(node, heap[j])) {
-      heap[i] = heap[j]; // shift parents down
+    // Parent of node i in a 1-based d-ary heap.
+    int j = ((i - 2) / ARITY) + 1;
+    while (i > 1 && lessThan.lessThan(node, heap[j])) {
+      heap[i] = heap[j]; // shift parent down
       i = j;
-      j = j >>> 1;
+      j = ((i - 2) / ARITY) + 1;
     }
     heap[i] = node; // install saved node
     return i != origPos;
@@ -344,19 +353,25 @@ public class PriorityQueue<T> implements Iterable<T> {
 
   protected void downHeap(int i) {
     T node = heap[i]; // save top node
-    int j = i << 1; // find smaller child
-    int k = j + 1;
-    if (k <= size && lessThan.lessThan(heap[k], heap[j])) {
-      j = k;
-    }
-    while (j <= size && lessThan.lessThan(heap[j], node)) {
-      heap[i] = heap[j]; // shift up child
-      i = j;
-      j = i << 1;
-      k = j + 1;
-      if (k <= size && lessThan.lessThan(heap[k], heap[j])) {
-        j = k;
+    for (; ; ) {
+      // First child of node i in a 1-based d-ary heap.
+      int firstChild = ARITY * (i - 1) + 2;
+      if (firstChild > size) {
+        break; // i is a leaf
       }
+      // Find the smallest child in [firstChild, lastChild].
+      int lastChild = Math.min(firstChild + ARITY - 1, size);
+      int best = firstChild;
+      for (int c = firstChild + 1; c <= lastChild; c++) {
+        if (lessThan.lessThan(heap[c], heap[best])) {
+          best = c;
+        }
+      }
+      if (lessThan.lessThan(heap[best], node) == false) {
+        break;
+      }
+      heap[i] = heap[best]; // shift smallest child up
+      i = best;
     }
     heap[i] = node; // install saved node
   }

@@ -372,6 +372,9 @@ public final class MultiTermsEnum extends BaseTermsEnum {
 
   private static final class TermMergeQueue extends PriorityQueue<TermsEnumWithSlice> {
 
+    // Must match PriorityQueue.ARITY (package-private there); fillTop walks the heap children.
+    private static final int HEAP_ARITY = 3;
+
     final int[] stack;
 
     TermMergeQueue(int size) {
@@ -395,8 +398,12 @@ public final class MultiTermsEnum extends BaseTermsEnum {
 
       while (stackLen != 0) {
         final int index = stack[--stackLen];
-        final int leftChild = index << 1;
-        for (int child = leftChild, end = Math.min(size, leftChild + 1); child <= end; ++child) {
+        // Children of node `index` in PriorityQueue's 1-based d-ary heap (arity kept in sync with
+        // PriorityQueue.ARITY).
+        final int firstChild = HEAP_ARITY * (index - 1) + 2;
+        for (int child = firstChild, end = Math.min(size, firstChild + HEAP_ARITY - 1);
+            child <= end;
+            ++child) {
           TermsEnumWithSlice te = (TermsEnumWithSlice) getHeapArray()[child];
           if (te.compareTermTo(tops[0]) == 0) {
             tops[numTop++] = te;

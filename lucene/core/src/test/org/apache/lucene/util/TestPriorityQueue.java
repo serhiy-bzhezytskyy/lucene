@@ -42,7 +42,8 @@ public class TestPriorityQueue extends LuceneTestCase {
     protected final void checkValidity() {
       Object[] heapArray = getHeapArray();
       for (int i = 1; i <= size(); i++) {
-        int parent = i >>> 1;
+        // Parent of node i in the 1-based d-ary heap used by PriorityQueue (arity 3).
+        int parent = ((i - 2) / 3) + 1;
         if (parent > 1) {
           assertThat((Integer) heapArray[i], greaterThanOrEqualTo((Integer) heapArray[parent]));
         }
@@ -197,19 +198,14 @@ public class TestPriorityQueue extends LuceneTestCase {
 
   private boolean assertHeap(PriorityQueue<Integer> pq) {
     Object[] heapArray = pq.getHeapArray();
-    // The loop goes down to 1 as heap is 1-based not 0-based.
-    for (int i = (heapArray.length >>> 1); i >= 1; i--) {
-      int left = i << 1;
-      int right = left + 1;
-      if (right < heapArray.length) {
-        if ((Integer) heapArray[i] > (Integer) heapArray[right]) {
-          return false;
-        }
-        if ((Integer) heapArray[i] > (Integer) heapArray[left]) {
-          return false;
-        }
-      } else if (left < heapArray.length) {
-        if ((Integer) heapArray[i] > (Integer) heapArray[left]) {
+    // PriorityQueue uses a 1-based d-ary heap (arity 3): the children of node i are at
+    // [3*(i-1)+2, 3*(i-1)+4]. Each node must be <= all of its children.
+    final int arity = 3;
+    int last = heapArray.length - 1;
+    for (int i = 1; i <= last; i++) {
+      int firstChild = arity * (i - 1) + 2;
+      for (int c = firstChild; c < firstChild + arity && c <= last; c++) {
+        if ((Integer) heapArray[i] > (Integer) heapArray[c]) {
           return false;
         }
       }
